@@ -38,8 +38,11 @@ Gui, Settings: Add, Button, x120 y160 w100 h30 gCancelSettings, Cancel ; Button 
 
 ; Hotkey to stop typing when F1 is pressed
 global StopTyping := false
-F1:: StopTyping := true ; Stop typing when F1 is pressed
-return ; Exit the F1 hotkey without breaking the script
+F1:: 
+{
+    StopTyping := true
+    return
+}
 
 ; Open settings GUI
 OpenSettings:
@@ -76,19 +79,38 @@ StopTyping := false ; Reset the stop typing flag
 Clipboard := UserInput ; Copy the text to the clipboard
 ControlFocus, , ahk_class Chrome_WidgetWin_1 ; Focus on CodeHS Python editor
 FunctionCount := 0 ; Counter for function definitions
+PreviousLineIsComment := false ; Flag to check if the previous line was a comment
+
 Loop, Parse, Clipboard, `n, `r ; Handle multiline input (if any)
 {
     if StopTyping ; Check if F1 was pressed to stop typing
         break
     NewField := A_LoopField ; Assign A_LoopField to a new variable
+
+    ; Check if the previous line was a comment
+    if PreviousLineIsComment {
+        Send, {BS 2}
+        PreviousLineIsComment := false
+    }
+
     ; Detect function and loop definitions
     if (RegExMatch(NewField, "^\s*(def|for|if|while)\s")) {
         FunctionCount++
+        ; Backspace based on conditions
         if (FunctionCount > 1) {
-            ; Backspace twice for indentation
-            Send, {BS 2}
+            if (RegExMatch(NewField, "^\s*for\s") && FunctionCount > 2) {
+                Send, {BS}
+            } else {
+                Send, {BS 2}
+            }
         }
     }
+
+    ; Check if the current line is a comment
+    if (RegExMatch(NewField, "^\s*#")) {
+        PreviousLineIsComment := true
+    }
+
     ; Replace special characters
     StringReplace, NewField, NewField, `#, {Shift Down}3{Shift Up}, All ; Handle #
     StringReplace, NewField, NewField, `t, {Tab}, All ; Replace tabs with {Tab} for indentation
@@ -103,7 +125,6 @@ Loop, Parse, Clipboard, `n, `r ; Handle multiline input (if any)
     Sleep, %TypingSpeed% ; Use the value from the typing speed input box
     Send, {Enter} ; Add Enter key press for multiline typing
 }
-MsgBox, Done ; Display a message box saying "Done"
 Gui, Main: Default ; Reset focus to the main GUI
 return
 
