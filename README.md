@@ -2,7 +2,7 @@
 If your teacher has disabled copy and paste on CodeHS, use this AHK script to quickly type in code. This will only work with Python Turtle.
 
 ## Prerequisites
-- **AutoHotkey**: Ensure you have AutoHotkey installed. You can download it from the [official website](https://www.autohotkey.com/).
+- **AutoHotkey**: Ensure you have AutoHotkey 1.1 installed. You can download it from the [official website](https://www.autohotkey.com/).
 
 **Run the Script**:
    - Double-click the `run.ahk` file to run the script.
