@@ -1,133 +1,83 @@
-#Persistent ; Keep the script running
-#SingleInstance Force ; Ensure only one instance of the script runs at a time
+#Requires AutoHotkey v2
+#SingleInstance Force
+#Warn
 
-; Variables to store settings
-global TypingSpeed := 100
-global StartDelay := 0
-global AlwaysOnTop := false
+; Create the GUI
+MyGui := Gui()
+MyGui.Title := "AutoTyper v2"
+MyGui.Opt("+AlwaysOnTop") ; Make the GUI always on top
+MyGui.Add("Text",, "Start Delay (ms):")
+MyGui.Add("Edit", "vStartDelay w300", "2000")  ; Default start delay
+MyGui.Add("Text",, "Typing Offset (ms):")
+MyGui.Add("Edit", "vTypingOffset w300", "100") ; Default typing offset
+MyGui.Add("Text",, "Typing Speed (ms):")
+MyGui.Add("Edit", "vTypingSpeed w300", "50")   ; Default typing speed
+MyGui.Add("Text",, "Text to Type:")
+MyGui.Add("Edit", "vInputText r5 w300", "") ; InputText will not be saved
+MyGui.Add("Button", "Default w80", "Start Typing").OnEvent("Click", StartTyping)
+MyGui.Add("Button", "w80", "Save Settings").OnEvent("Click", SaveSettings)
+MyGui.Show()
 
-; Load settings from file if it exists
-if FileExist("settings.ini") {
-    IniRead, TypingSpeed, settings.ini, Settings, TypingSpeed, 100
-    IniRead, StartDelay, settings.ini, Settings, StartDelay, 0
-    IniRead, AlwaysOnTop, settings.ini, Settings, AlwaysOnTop, 0
-    if AlwaysOnTop {
-        Gui, Main: +AlwaysOnTop
-    } else {
-        Gui, Main: -AlwaysOnTop
-    }
-}
+LoadSettings()
 
-; Create the main GUI
-Gui, Main: +Resize ; Allow resizing by dragging the corners
-Gui, Main: Add, Text, x10 y10 w200 h20, Enter text to type:
-Gui, Main: Add, Edit, vUserInput x10 y40 w300 h100 ; A text box to input text
-Gui, Main: Add, Button, x10 y150 w100 h30 gOpenSettings, Settings ; Button to open settings
-Gui, Main: Add, Button, x120 y150 w100 h30 gStart, Start ; Button to trigger the typing action
-Gui, Main: Show, w320 h200, Text Typing Tool ; Show the main GUI window
+StartTyping(*) {
+    global MyGui
+    Values := MyGui.Submit(False)
+    StartDelay := Values.StartDelay
+    TypingOffset := Values.TypingOffset
+    TypingSpeed := Values.TypingSpeed
+    InputText := Values.InputText
 
-; Create the settings GUI
-Gui, Settings: +Resize ; Allow resizing by dragging the corners
-Gui, Settings: Add, Text, x10 y10 w200 h20, Typing Speed (ms delay):
-Gui, Settings: Add, Edit, vTypingSpeed x10 y40 w100, %TypingSpeed% ; Input box to set typing speed
-Gui, Settings: Add, Text, x10 y80 w200 h20, Start Delay (ms):
-Gui, Settings: Add, Edit, vStartDelay x10 y100 w100, %StartDelay% ; Input box to set start delay
-Gui, Settings: Add, CheckBox, vAlwaysOnTop x10 y130 w200 h20 Checked%AlwaysOnTop%, Always on Top ; Checkbox to toggle always-on-top
-Gui, Settings: Add, Button, x10 y160 w100 h30 gSaveSettings, Save ; Button to save settings
-Gui, Settings: Add, Button, x120 y160 w100 h30 gCancelSettings, Cancel ; Button to cancel settings
+    Sleep StartDelay
 
-; Hotkey to stop typing when F1 is pressed
-global StopTyping := false
-F1:: 
-{
-    StopTyping := true
-    return
-}
+    Lines := StrSplit(InputText, "`n", "`r")
+    IndentStack := [0]  ; Stack for keeping track of indentation levels
+    LastIndent := 0     ; Track the last indentation level
 
-; Open settings GUI
-OpenSettings:
-Gui, Settings: Show, w320 h220, Settings
-Gui, Settings: +AlwaysOnTop ; Ensure the settings window is always on top
-return
+    for Line in Lines {
+        
+        CleanLine := Trim(Line, " `t")  ; Remove leading/trailing spaces
+        CurrentIndent := StrLen(Line) - StrLen(CleanLine)  ; Count leading spaces
 
-; Save settings and return to main GUI
-SaveSettings:
-Gui, Submit, NoHide ; Save the settings
-IniWrite, %TypingSpeed%, settings.ini, Settings, TypingSpeed
-IniWrite, %StartDelay%, settings.ini, Settings, StartDelay
-IniWrite, %AlwaysOnTop%, settings.ini, Settings, AlwaysOnTop
-Gui, Settings: Hide ; Hide the settings GUI
-Gui, Main: Default
-if AlwaysOnTop {
-    Gui, Main: +AlwaysOnTop ; Enable always-on-top if the checkbox is checked
-} else {
-    Gui, Main: -AlwaysOnTop ; Disable always-on-top if the checkbox is unchecked
-}
-return
-
-; Cancel settings and return to main GUI
-CancelSettings:
-Gui, Settings: Hide ; Hide the settings GUI
-Gui, Main: Default
-return
-
-; Button action when Start is clicked
-Start:
-Gui, Submit, NoHide ; Get the text from the input box and keep GUI open
-Sleep, %StartDelay% ; Delay before starting to type, based on user input
-StopTyping := false ; Reset the stop typing flag
-Clipboard := UserInput ; Copy the text to the clipboard
-ControlFocus, , ahk_class Chrome_WidgetWin_1 ; Focus on CodeHS Python editor
-FunctionCount := 0 ; Counter for function definitions
-PreviousLineIsComment := false ; Flag to check if the previous line was a comment
-
-Loop, Parse, Clipboard, `n, `r ; Handle multiline input (if any)
-{
-    if StopTyping ; Check if F1 was pressed to stop typing
-        break
-    NewField := A_LoopField ; Assign A_LoopField to a new variable
-
-    ; Check if the previous line was a comment
-    if PreviousLineIsComment {
-        Send, {BS 2}
-        PreviousLineIsComment := false
-    }
-
-    ; Detect function and loop definitions
-    if (RegExMatch(NewField, "^\s*(def|for|if|while)\s")) {
-        FunctionCount++
-        ; Backspace based on conditions
-        if (FunctionCount > 1) {
-            if (RegExMatch(NewField, "^\s*for\s") && FunctionCount > 2) {
-                Send, {BS}
-            } else {
-                Send, {BS 2}
+        ; Handle indentation correctly
+        if (CurrentIndent < LastIndent) {
+            IndentDiff := (LastIndent - CurrentIndent) // 4  ; Assuming 4 spaces per indent
+            Loop IndentDiff {
+                Send "{Backspace 1}"
+                Sleep 50
             }
         }
-    }
 
-    ; Check if the current line is a comment
-    if (RegExMatch(NewField, "^\s*#")) {
-        PreviousLineIsComment := true
+        ; Type the cleaned line
+        Loop Parse, CleanLine {
+            Send "{Text}" A_LoopField
+            Sleep TypingSpeed + Random(1, TypingOffset)
+        }
+        
+        Send "{Enter}"
+        LastIndent := CurrentIndent  ; Update the last indent level
     }
-
-    ; Replace special characters
-    StringReplace, NewField, NewField, `#, {Shift Down}3{Shift Up}, All ; Handle #
-    StringReplace, NewField, NewField, `t, {Tab}, All ; Replace tabs with {Tab} for indentation
-    StringReplace, NewField, NewField, `, {Backtick}, All ; Replace backticks with {Backtick}
-    StringReplace, NewField, NewField, `%, {Percent}, All ; Replace % with {Percent}
-    ; Remove leading spaces or tabs to ensure correct indentation
-    While (SubStr(NewField, 1, 1) = " " || SubStr(NewField, 1, 1) = A_Tab)
-    {
-        StringTrimLeft, NewField, NewField, 1
-    }
-    SendInput, %NewField%
-    Sleep, %TypingSpeed% ; Use the value from the typing speed input box
-    Send, {Enter} ; Add Enter key press for multiline typing
+    
+    MsgBox("Typing complete!")
 }
-Gui, Main: Default ; Reset focus to the main GUI
-return
 
-; Close the GUI if the user closes the window
-GuiClose:
-ExitApp ; Close the script if the GUI is closed
+; Save settings to settings.ini
+SaveSettings(*) {
+    global MyGui
+    Values := MyGui.Submit(False)
+    IniWrite Values.StartDelay, "settings.ini", "Settings", "StartDelay"
+    IniWrite Values.TypingOffset, "settings.ini", "Settings", "TypingOffset"
+    IniWrite Values.TypingSpeed, "settings.ini", "Settings", "TypingSpeed"
+    MsgBox("Settings saved!", "AutoTyper", "0x40000")
+}
+
+; Load settings from settings.ini
+LoadSettings() {
+    global MyGui
+    StartDelay := IniRead("settings.ini", "Settings", "StartDelay", "2000")
+    TypingOffset := IniRead("settings.ini", "Settings", "TypingOffset", "100")
+    TypingSpeed := IniRead("settings.ini", "Settings", "TypingSpeed", "50")
+    MyGui["StartDelay"].Text := StartDelay
+    MyGui["TypingOffset"].Text := TypingOffset
+    MyGui["TypingSpeed"].Text := TypingSpeed
+}
